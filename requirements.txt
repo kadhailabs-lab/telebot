@@ -1,0 +1,4 @@
+python-telegram-bot[webhooks]
+pymongo
+python-dotenv
+dnspython
