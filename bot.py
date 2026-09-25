@@ -47,10 +47,6 @@ WEBHOOK_SECRET = os.getenv(
     "WEBHOOK_SECRET"
 )
 
-# ============================================================
-# PREMIUM CHANNEL
-# ============================================================
-
 PREMIUM_CHANNEL_ID = int(
     os.getenv(
         "PREMIUM_CHANNEL_ID",
@@ -62,12 +58,6 @@ PREMIUM_CHANNEL_LINK = os.getenv(
     "PREMIUM_CHANNEL_LINK",
     "https://t.me/+X34Y0FBLteQyNDFl",
 )
-
-PREMIUM_PRICE_TEXT = "100 ⭐ / 30 days"
-
-# ============================================================
-# LEADERBOARD
-# ============================================================
 
 MINIMUM_LEADERBOARD_VOTES = 10
 
@@ -93,25 +83,17 @@ logger = logging.getLogger(__name__)
 # MONGODB
 # ============================================================
 
-mongo_client = MongoClient(
-    MONGODB_URI
-)
+mongo_client = MongoClient(MONGODB_URI)
 
-db = mongo_client[
-    MONGODB_DATABASE
-]
+db = mongo_client[MONGODB_DATABASE]
 
-submissions_collection = db[
-    "submissions"
-]
+submissions_collection = db["submissions"]
 
-votes_collection = db[
-    "votes"
-]
+votes_collection = db["votes"]
 
 
 # ============================================================
-# DATABASE INDEXES
+# INDEXES
 # ============================================================
 
 votes_collection.create_index(
@@ -123,21 +105,15 @@ votes_collection.create_index(
 )
 
 submissions_collection.create_index(
-    [
-        ("user_id", ASCENDING)
-    ]
+    [("user_id", ASCENDING)]
 )
 
 submissions_collection.create_index(
-    [
-        ("channel_message_id", ASCENDING)
-    ]
+    [("channel_message_id", ASCENDING)]
 )
 
 votes_collection.create_index(
-    [
-        ("submission_id", ASCENDING)
-    ]
+    [("submission_id", ASCENDING)]
 )
 
 
@@ -175,17 +151,29 @@ async def safe_answer(
             show_alert=show_alert,
         )
 
-    except BadRequest:
+        return True
 
-        pass
+    except BadRequest as e:
 
-    except Exception:
+        logger.error(
+            "Callback answer failed: %s",
+            e,
+        )
 
-        pass
+        return False
+
+    except Exception as e:
+
+        logger.exception(
+            "Callback answer error: %s",
+            e,
+        )
+
+        return False
 
 
 # ============================================================
-# LEADERBOARD
+# LEADERBOARD DATABASE QUERY
 # ============================================================
 
 def get_leaderboard():
@@ -214,7 +202,7 @@ def get_leaderboard():
 
                                     "$submission_id",
 
-                                    "$$submission_id_str"
+                                    "$$submission_id_str",
 
                                 ]
 
@@ -226,7 +214,7 @@ def get_leaderboard():
 
                 ],
 
-                "as": "submission_votes"
+                "as": "submission_votes",
 
             }
 
@@ -255,7 +243,7 @@ def get_leaderboard():
 
                 "vote_count": {
                     "$sum": 1
-                }
+                },
 
             }
 
@@ -277,7 +265,7 @@ def get_leaderboard():
 
                 "average_rating": -1,
 
-                "vote_count": -1
+                "vote_count": -1,
 
             }
 
@@ -285,7 +273,7 @@ def get_leaderboard():
 
         {
             "$limit": 5
-        }
+        },
 
     ]
 
@@ -308,7 +296,6 @@ def rating_keyboard(
 
     buttons = [
 
-        # Rating row
         [
 
             InlineKeyboardButton(
@@ -354,10 +341,6 @@ def rating_keyboard(
 
     ]
 
-    # ========================================================
-    # PREMIUM CONTACT BUTTONS
-    # ========================================================
-
     contact_buttons = []
 
     if has_instagram:
@@ -392,10 +375,6 @@ def rating_keyboard(
             contact_buttons
         )
 
-    # ========================================================
-    # BOTTOM BUTTONS
-    # ========================================================
-
     buttons.append(
 
         [
@@ -407,9 +386,7 @@ def rating_keyboard(
 
             InlineKeyboardButton(
                 "🏆 Leaderboard",
-                callback_data=(
-                    "leaderboard_popup"
-                ),
+                callback_data="leaderboard_popup",
             ),
 
         ]
@@ -422,7 +399,7 @@ def rating_keyboard(
 
 
 # ============================================================
-# /START
+# START
 # ============================================================
 
 async def start(
@@ -471,7 +448,7 @@ async def start(
 
 
 # ============================================================
-# /SUBMIT
+# SUBMIT
 # ============================================================
 
 async def submit(
@@ -515,7 +492,7 @@ async def submit(
 
 
 # ============================================================
-# PHOTO HANDLER
+# PHOTO
 # ============================================================
 
 async def handle_photo(
@@ -537,12 +514,8 @@ async def handle_photo(
         user.id
     )
 
-    waiting_for_caption[
-        user.id
-    ] = {
-
+    waiting_for_caption[user.id] = {
         "file_id": photo.file_id
-
     }
 
     await update.message.reply_text(
@@ -551,7 +524,7 @@ async def handle_photo(
 
 
 # ============================================================
-# CAPTION HANDLER
+# CAPTION
 # ============================================================
 
 async def handle_caption(
@@ -724,9 +697,7 @@ async def handle_instagram(
         "",
     )
 
-    instagram = instagram.strip(
-        "/ "
-    )
+    instagram = instagram.strip("/ ")
 
     if instagram.startswith("@"):
 
@@ -929,9 +900,9 @@ async def create_submission(
         whatsapp_number
     )
 
-    # ========================================================
-    # DATABASE DOCUMENT
-    # ========================================================
+    # --------------------------------------------------------
+    # SAVE
+    # --------------------------------------------------------
 
     submission = {
 
@@ -969,9 +940,9 @@ async def create_submission(
         result.inserted_id
     )
 
-    # ========================================================
-    # PUBLIC VOTING CHANNEL
-    # ========================================================
+    # --------------------------------------------------------
+    # PUBLIC CHANNEL
+    # --------------------------------------------------------
 
     public_caption = (
 
@@ -1024,22 +995,19 @@ async def create_submission(
 
     )
 
-    # ========================================================
+    # --------------------------------------------------------
     # PREMIUM CHANNEL
     #
-    # NO BUTTONS
-    # ========================================================
+    # NO BUTTONS.
+    # --------------------------------------------------------
 
     if share_instagram or share_whatsapp:
 
         premium_lines = [
 
             "💎 <b>PREMIUM SUBMISSION</b>",
-
             "",
-
             escape(caption),
-
             "",
 
         ]
@@ -1118,9 +1086,9 @@ async def create_submission(
                 e,
             )
 
-    # ========================================================
-    # CONFIRMATION
-    # ========================================================
+    # --------------------------------------------------------
+    # CONFIRM
+    # --------------------------------------------------------
 
     confirmation = (
 
@@ -1152,14 +1120,14 @@ async def create_submission(
 
 
 # ============================================================
-# PREMIUM CONTACT BUTTON
+# PREMIUM BUTTON
 # ============================================================
 #
-# NO MEMBERSHIP CHECK.
+# IMPORTANT:
+# Telegram callback alert text must be <= 200 characters.
 #
-# NO CONTACT EXPOSURE.
-#
-# BIG TELEGRAM POPUP.
+# This popup intentionally does NOT reveal the contact.
+# It tells the user to check the pinned message.
 # ============================================================
 
 async def premium_contact(
@@ -1174,33 +1142,25 @@ async def premium_contact(
         query.data,
     )
 
+    popup_text = (
+        "🔒 PREMIUM CONTENT\n\n"
+        "📷 Instagram / 📱 WhatsApp details "
+        "are available in Premium.\n\n"
+        "💎 Access: 100 ⭐ / 30 days\n\n"
+        "📌 Check the PINNED MESSAGE for the link."
+    )
+
+    # IMPORTANT:
+    # This is under Telegram's 200-character limit.
     await safe_answer(
-
         query,
-
-        (
-            "🔒 PREMIUM CONTENT\n\n"
-
-            "📷 Instagram / 📱 WhatsApp details "
-            "are available in our Premium Channel.\n\n"
-
-            "💎 Premium Access: "
-            f"{PREMIUM_PRICE_TEXT}\n\n"
-
-            "📌 Check the PINNED MESSAGE in this "
-            "channel for the Premium channel link.\n\n"
-
-            "Join Premium to view the full "
-            "contact details."
-        ),
-
+        popup_text,
         show_alert=True,
-
     )
 
 
 # ============================================================
-# VOTE HANDLER
+# VOTE
 # ============================================================
 
 async def handle_vote(
@@ -1213,13 +1173,13 @@ async def handle_vote(
     data = query.data
 
     logger.info(
-        "Received callback: %s",
+        "Received vote callback: %s",
         data,
     )
 
-    # ========================================================
-    # CALLBACK FORMAT
-    # ========================================================
+    # --------------------------------------------------------
+    # Validate callback
+    # --------------------------------------------------------
 
     if not data:
 
@@ -1231,9 +1191,7 @@ async def handle_vote(
 
         return
 
-    if not data.startswith(
-        "rate:"
-    ):
+    if not data.startswith("rate:"):
 
         await safe_answer(
             query,
@@ -1264,9 +1222,9 @@ async def handle_vote(
 
     rating_str = parts[2]
 
-    # ========================================================
-    # RATING
-    # ========================================================
+    # --------------------------------------------------------
+    # Rating
+    # --------------------------------------------------------
 
     try:
 
@@ -1300,9 +1258,9 @@ async def handle_vote(
 
         return
 
-    # ========================================================
-    # OBJECT ID
-    # ========================================================
+    # --------------------------------------------------------
+    # ObjectId
+    # --------------------------------------------------------
 
     try:
 
@@ -1325,16 +1283,14 @@ async def handle_vote(
 
         return
 
-    # ========================================================
-    # GET SUBMISSION
-    # ========================================================
+    # --------------------------------------------------------
+    # Submission
+    # --------------------------------------------------------
 
     submission = submissions_collection.find_one(
-
         {
             "_id": object_id
         }
-
     )
 
     if not submission:
@@ -1349,29 +1305,25 @@ async def handle_vote(
 
     user = query.from_user
 
-    # ========================================================
-    # SELF VOTE
-    # ========================================================
+    # --------------------------------------------------------
+    # Self-vote
+    # --------------------------------------------------------
 
     if submission.get(
         "user_id"
     ) == user.id:
 
         await safe_answer(
-
             query,
-
             "❌ You cannot vote for your own photo.",
-
             show_alert=True,
-
         )
 
         return
 
-    # ========================================================
-    # DUPLICATE CHECK
-    # ========================================================
+    # --------------------------------------------------------
+    # Duplicate vote
+    # --------------------------------------------------------
 
     existing_vote = votes_collection.find_one(
 
@@ -1389,20 +1341,16 @@ async def handle_vote(
     if existing_vote:
 
         await safe_answer(
-
             query,
-
             "⚠️ You already voted for this photo.",
-
             show_alert=True,
-
         )
 
         return
 
-    # ========================================================
-    # INSERT VOTE
-    # ========================================================
+    # --------------------------------------------------------
+    # Insert vote
+    # --------------------------------------------------------
 
     try:
 
@@ -1429,13 +1377,9 @@ async def handle_vote(
     except DuplicateKeyError:
 
         await safe_answer(
-
             query,
-
             "⚠️ You already voted for this photo.",
-
             show_alert=True,
-
         )
 
         return
@@ -1443,25 +1387,21 @@ async def handle_vote(
     except Exception as e:
 
         logger.exception(
-            "Vote insert failed: %s",
+            "Vote insertion failed: %s",
             e,
         )
 
         await safe_answer(
-
             query,
-
-            "❌ Could not save your vote. Please try again.",
-
+            "❌ Could not save your vote.",
             show_alert=True,
-
         )
 
         return
 
-    # ========================================================
-    # CALCULATE RATING
-    # ========================================================
+    # --------------------------------------------------------
+    # Calculate stats
+    # --------------------------------------------------------
 
     votes = list(
 
@@ -1494,9 +1434,9 @@ async def handle_vote(
 
     )
 
-    # ========================================================
-    # UPDATE PUBLIC POST
-    # ========================================================
+    # --------------------------------------------------------
+    # Update public post
+    # --------------------------------------------------------
 
     public_caption = (
 
@@ -1518,10 +1458,9 @@ async def handle_vote(
 
             chat_id=VOTING_CHANNEL_ID,
 
-            message_id=
-                submission[
-                    "channel_message_id"
-                ],
+            message_id=submission[
+                "channel_message_id"
+            ],
 
             caption=public_caption,
 
@@ -1531,17 +1470,15 @@ async def handle_vote(
 
                 submission_id,
 
-                has_instagram=
-                    submission.get(
-                        "share_instagram",
-                        False,
-                    ),
+                has_instagram=submission.get(
+                    "share_instagram",
+                    False,
+                ),
 
-                has_whatsapp=
-                    submission.get(
-                        "share_whatsapp",
-                        False,
-                    ),
+                has_whatsapp=submission.get(
+                    "share_whatsapp",
+                    False,
+                ),
 
             ),
 
@@ -1550,25 +1487,18 @@ async def handle_vote(
     except Exception as e:
 
         logger.exception(
-
             "Could not update voting post: %s",
-
             e,
-
         )
 
-    # ========================================================
-    # SUCCESS
-    # ========================================================
+    # --------------------------------------------------------
+    # Success
+    # --------------------------------------------------------
 
     await safe_answer(
-
         query,
-
         f"⭐ You rated this photo {rating}/5",
-
         show_alert=True,
-
     )
 
 
@@ -1598,9 +1528,8 @@ async def leaderboard_popup(
 
             (
                 "🏆 LEADERBOARD\n\n"
-
                 "No members have reached "
-                "the minimum of 10 votes yet."
+                "10 votes yet."
             ),
 
             show_alert=True,
@@ -1610,21 +1539,16 @@ async def leaderboard_popup(
         return
 
     medals = [
-
         "🥇",
         "🥈",
         "🥉",
         "4️⃣",
         "5️⃣",
-
     ]
 
     lines = [
-
         "🏆 LEADERBOARD",
-
         "",
-
     ]
 
     for index, member in enumerate(
@@ -1637,9 +1561,7 @@ async def leaderboard_popup(
 
         if username:
 
-            name = (
-                f"@{username}"
-            )
+            name = f"@{username}"
 
         else:
 
@@ -1649,27 +1571,22 @@ async def leaderboard_popup(
             )
 
         average = float(
-
             member.get(
                 "average_rating",
                 0,
             )
-
         )
 
         vote_count = int(
-
             member.get(
                 "vote_count",
                 0,
             )
-
         )
 
         lines.append(
 
-            f"{medals[index]} "
-            f"{name}\n"
+            f"{medals[index]} {name}\n"
             f"   ⭐ {average:.2f}/5 "
             f"• 🗳 {vote_count} votes"
 
@@ -1679,18 +1596,15 @@ async def leaderboard_popup(
         lines
     )
 
+    # Keep popup safely under Telegram's limit.
     if len(text) > 1900:
 
         text = text[:1900]
 
     await safe_answer(
-
         query,
-
         text,
-
         show_alert=True,
-
     )
 
 
@@ -1710,9 +1624,8 @@ async def leaderboard_command(
         await update.message.reply_text(
 
             "🏆 <b>LEADERBOARD</b>\n\n"
-
             "No members have reached "
-            "the minimum of 10 votes yet.",
+            "10 total votes yet.",
 
             parse_mode="HTML",
 
@@ -1721,21 +1634,16 @@ async def leaderboard_command(
         return
 
     medals = [
-
         "🥇",
         "🥈",
         "🥉",
         "4️⃣",
         "5️⃣",
-
     ]
 
     lines = [
-
         "🏆 <b>LEADERBOARD</b>",
-
         "",
-
     ]
 
     for index, member in enumerate(
@@ -1748,9 +1656,7 @@ async def leaderboard_command(
 
         if username:
 
-            name = (
-                f"@{username}"
-            )
+            name = f"@{username}"
 
         else:
 
@@ -1760,21 +1666,17 @@ async def leaderboard_command(
             )
 
         average = float(
-
             member.get(
                 "average_rating",
                 0,
             )
-
         )
 
         vote_count = int(
-
             member.get(
                 "vote_count",
                 0,
             )
-
         )
 
         lines.append(
@@ -1952,10 +1854,6 @@ async def error_handler(
 
 def main():
 
-    # ========================================================
-    # ENVIRONMENT VALIDATION
-    # ========================================================
-
     if not BOT_TOKEN:
 
         raise ValueError(
@@ -1968,10 +1866,6 @@ def main():
             "MONGODB_URI is missing."
         )
 
-    # ========================================================
-    # BUILD APPLICATION
-    # ========================================================
-
     application = (
         Application.builder()
         .token(BOT_TOKEN)
@@ -1983,139 +1877,70 @@ def main():
     # ========================================================
 
     application.add_handler(
-
         CommandHandler(
             "start",
             start,
         )
-
     )
 
     application.add_handler(
-
         CommandHandler(
             "submit",
             submit,
         )
-
     )
 
     application.add_handler(
-
         CommandHandler(
             "leaderboard",
             leaderboard_command,
         )
-
     )
 
     application.add_handler(
-
         CommandHandler(
             "mystats",
             mystats,
         )
-
     )
 
     # ========================================================
     # CALLBACKS
     # ========================================================
 
-    # --------------------------------------------------------
-    # LEADERBOARD
-    # --------------------------------------------------------
-
     application.add_handler(
-
         CallbackQueryHandler(
-
             leaderboard_popup,
-
             pattern=r"^leaderboard_popup$",
-
         )
-
     )
 
-    # --------------------------------------------------------
-    # VOTING
-    # --------------------------------------------------------
-
     application.add_handler(
-
         CallbackQueryHandler(
-
             handle_vote,
-
             pattern=r"^rate:",
-
         )
-
     )
 
-    # --------------------------------------------------------
-    # INSTAGRAM PREMIUM
-    # --------------------------------------------------------
-
     application.add_handler(
-
         CallbackQueryHandler(
-
             premium_contact,
-
-            pattern=r"^instagram:",
-
+            pattern=r"^(instagram|whatsapp):",
         )
-
     )
 
-    # --------------------------------------------------------
-    # WHATSAPP PREMIUM
-    # --------------------------------------------------------
-
     application.add_handler(
-
         CallbackQueryHandler(
-
-            premium_contact,
-
-            pattern=r"^whatsapp:",
-
-        )
-
-    )
-
-    # --------------------------------------------------------
-    # INSTAGRAM SETUP
-    # --------------------------------------------------------
-
-    application.add_handler(
-
-        CallbackQueryHandler(
-
             instagram_choice,
-
             pattern=r"^instagram_(yes|no)$",
-
         )
-
     )
 
-    # --------------------------------------------------------
-    # WHATSAPP SETUP
-    # --------------------------------------------------------
-
     application.add_handler(
-
         CallbackQueryHandler(
-
             whatsapp_choice,
-
             pattern=r"^whatsapp_(yes|no)$",
-
         )
-
     )
 
     # ========================================================
@@ -2123,16 +1948,11 @@ def main():
     # ========================================================
 
     application.add_handler(
-
         MessageHandler(
-
             filters.ChatType.PRIVATE
             & filters.PHOTO,
-
             handle_photo,
-
         )
-
     )
 
     # ========================================================
@@ -2140,21 +1960,16 @@ def main():
     # ========================================================
 
     application.add_handler(
-
         MessageHandler(
-
             filters.ChatType.PRIVATE
             & filters.TEXT
             & ~filters.COMMAND,
-
             handle_text_router,
-
         )
-
     )
 
     # ========================================================
-    # ERROR HANDLER
+    # ERROR
     # ========================================================
 
     application.add_error_handler(
@@ -2166,12 +1981,10 @@ def main():
     # ========================================================
 
     port = int(
-
         os.environ.get(
             "PORT",
             "10000",
         )
-
     )
 
     render_hostname = os.environ.get(
@@ -2181,11 +1994,9 @@ def main():
     if render_hostname:
 
         webhook_url = (
-
             f"https://"
             f"{render_hostname}"
             f"/telegram"
-
         )
 
         logger.info(
@@ -2216,16 +2027,13 @@ def main():
         )
 
         application.run_polling(
-
             drop_pending_updates=False
-
         )
 
 
 # ============================================================
-# START
+# RUN
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
