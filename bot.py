@@ -5,6 +5,7 @@ from html import escape
 
 from dotenv import load_dotenv
 from pymongo import MongoClient, ASCENDING
+from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 
 from telegram import (
@@ -46,7 +47,10 @@ WEBHOOK_SECRET = os.getenv(
     "WEBHOOK_SECRET"
 )
 
-# Premium channel
+# ============================================================
+# PREMIUM CHANNEL
+# ============================================================
+
 PREMIUM_CHANNEL_ID = int(
     os.getenv(
         "PREMIUM_CHANNEL_ID",
@@ -54,14 +58,17 @@ PREMIUM_CHANNEL_ID = int(
     )
 )
 
-# Telegram paid invite link
 PREMIUM_CHANNEL_LINK = os.getenv(
     "PREMIUM_CHANNEL_LINK",
     "https://t.me/+X34Y0FBLteQyNDFl",
 )
 
-# Minimum total votes received before appearing
-# on leaderboard
+PREMIUM_PRICE_TEXT = "100 ⭐ / 30 days"
+
+# ============================================================
+# LEADERBOARD
+# ============================================================
+
 MINIMUM_LEADERBOARD_VOTES = 10
 
 
@@ -107,8 +114,6 @@ votes_collection = db[
 # DATABASE INDEXES
 # ============================================================
 
-# Prevent the same user from voting twice
-# on the same submission.
 votes_collection.create_index(
     [
         ("submission_id", ASCENDING),
@@ -137,7 +142,7 @@ votes_collection.create_index(
 
 
 # ============================================================
-# TEMPORARY USER SESSION STATE
+# TEMPORARY SUBMISSION STATE
 # ============================================================
 
 waiting_for_photo = set()
@@ -171,9 +176,11 @@ async def safe_answer(
         )
 
     except BadRequest:
+
         pass
 
     except Exception:
+
         pass
 
 
@@ -184,15 +191,6 @@ async def safe_answer(
 def get_leaderboard():
 
     pipeline = [
-
-        # ----------------------------------------------------
-        # Match submissions with their votes.
-        #
-        # submission _id = ObjectId
-        # vote submission_id = string
-        #
-        # Convert ObjectId to string before matching.
-        # ----------------------------------------------------
 
         {
             "$lookup": {
@@ -234,17 +232,9 @@ def get_leaderboard():
 
         },
 
-        # ----------------------------------------------------
-        # One document per vote
-        # ----------------------------------------------------
-
         {
             "$unwind": "$submission_votes"
         },
-
-        # ----------------------------------------------------
-        # Group all submissions/votes by creator
-        # ----------------------------------------------------
 
         {
             "$group": {
@@ -271,10 +261,6 @@ def get_leaderboard():
 
         },
 
-        # ----------------------------------------------------
-        # Minimum 10 votes
-        # ----------------------------------------------------
-
         {
             "$match": {
 
@@ -286,10 +272,6 @@ def get_leaderboard():
 
         },
 
-        # ----------------------------------------------------
-        # Highest average first
-        # ----------------------------------------------------
-
         {
             "$sort": {
 
@@ -300,10 +282,6 @@ def get_leaderboard():
             }
 
         },
-
-        # ----------------------------------------------------
-        # Top 5
-        # ----------------------------------------------------
 
         {
             "$limit": 5
@@ -319,7 +297,7 @@ def get_leaderboard():
 
 
 # ============================================================
-# PUBLIC CHANNEL KEYBOARD
+# PUBLIC VOTING KEYBOARD
 # ============================================================
 
 def rating_keyboard(
@@ -330,8 +308,9 @@ def rating_keyboard(
 
     buttons = [
 
-        # Rating row 1
+        # Rating row
         [
+
             InlineKeyboardButton(
                 "⭐ 1",
                 callback_data=(
@@ -352,10 +331,11 @@ def rating_keyboard(
                     f"rate:{submission_id}:3"
                 ),
             ),
+
         ],
 
-        # Rating row 2
         [
+
             InlineKeyboardButton(
                 "⭐ 4",
                 callback_data=(
@@ -369,38 +349,41 @@ def rating_keyboard(
                     f"rate:{submission_id}:5"
                 ),
             ),
+
         ],
+
     ]
 
-    # --------------------------------------------------------
-    # Contact buttons
-    #
-    # These buttons DO NOT contain contact information.
-    # They only open the Premium purchase prompt.
-    # --------------------------------------------------------
+    # ========================================================
+    # PREMIUM CONTACT BUTTONS
+    # ========================================================
 
     contact_buttons = []
 
     if has_instagram:
 
         contact_buttons.append(
+
             InlineKeyboardButton(
                 "📷 View Instagram",
                 callback_data=(
                     f"instagram:{submission_id}"
                 ),
             )
+
         )
 
     if has_whatsapp:
 
         contact_buttons.append(
+
             InlineKeyboardButton(
                 "📱 View WhatsApp",
                 callback_data=(
                     f"whatsapp:{submission_id}"
                 ),
             )
+
         )
 
     if contact_buttons:
@@ -409,11 +392,12 @@ def rating_keyboard(
             contact_buttons
         )
 
-    # --------------------------------------------------------
-    # Bottom buttons
-    # --------------------------------------------------------
+    # ========================================================
+    # BOTTOM BUTTONS
+    # ========================================================
 
     buttons.append(
+
         [
 
             InlineKeyboardButton(
@@ -429,6 +413,7 @@ def rating_keyboard(
             ),
 
         ]
+
     )
 
     return InlineKeyboardMarkup(
@@ -450,7 +435,6 @@ async def start(
 
     user = update.effective_user
 
-    # Reset current submission flow
     waiting_for_photo.add(
         user.id
     )
@@ -476,16 +460,13 @@ async def start(
         user.id
     )
 
-    # Reset Premium prompt tracking
-    context.user_data.pop(
-        "premium_prompt_message_id",
-        None,
-    )
-
     await update.message.reply_text(
+
         "📸 <b>Welcome!</b>\n\n"
         "Send me the photo you want to submit.",
+
         parse_mode="HTML",
+
     )
 
 
@@ -586,9 +567,7 @@ async def handle_caption(
     if user.id not in waiting_for_caption:
         return
 
-    caption = (
-        update.message.text.strip()
-    )
+    caption = update.message.text.strip()
 
     if not caption:
 
@@ -610,39 +589,37 @@ async def handle_caption(
 
         "📷 <b>Do you want to add your "
         "Instagram ID?</b>\n\n"
-        "It will be shown only in the "
-        "Premium channel.",
+        "It will be shown only in the Premium channel.",
 
         parse_mode="HTML",
 
         reply_markup=InlineKeyboardMarkup(
+
             [
 
                 [
 
                     InlineKeyboardButton(
                         "✅ Yes",
-                        callback_data=(
-                            "instagram_yes"
-                        ),
+                        callback_data="instagram_yes",
                     ),
 
                     InlineKeyboardButton(
                         "❌ No",
-                        callback_data=(
-                            "instagram_no"
-                        ),
+                        callback_data="instagram_no",
                     ),
 
                 ]
 
             ]
+
         ),
+
     )
 
 
 # ============================================================
-# INSTAGRAM YES / NO
+# INSTAGRAM CHOICE
 # ============================================================
 
 async def instagram_choice(
@@ -665,10 +642,6 @@ async def instagram_choice(
         user.id
     )
 
-    # --------------------------------------------------------
-    # YES
-    # --------------------------------------------------------
-
     if query.data == "instagram_yes":
 
         waiting_for_instagram.add(
@@ -676,16 +649,14 @@ async def instagram_choice(
         )
 
         await query.edit_message_text(
+
             "📷 Send your Instagram username.\n\n"
             "Example:\n"
             "@yourusername"
+
         )
 
         return
-
-    # --------------------------------------------------------
-    # NO
-    # --------------------------------------------------------
 
     waiting_for_whatsapp_choice.add(
         user.id
@@ -695,39 +666,37 @@ async def instagram_choice(
 
         "📱 <b>Do you want to add your "
         "WhatsApp number?</b>\n\n"
-        "It will be shown only in the "
-        "Premium channel.",
+        "It will be shown only in the Premium channel.",
 
         parse_mode="HTML",
 
         reply_markup=InlineKeyboardMarkup(
+
             [
 
                 [
 
                     InlineKeyboardButton(
                         "✅ Yes",
-                        callback_data=(
-                            "whatsapp_yes"
-                        ),
+                        callback_data="whatsapp_yes",
                     ),
 
                     InlineKeyboardButton(
                         "❌ No",
-                        callback_data=(
-                            "whatsapp_no"
-                        ),
+                        callback_data="whatsapp_no",
                     ),
 
                 ]
 
             ]
+
         ),
+
     )
 
 
 # ============================================================
-# INSTAGRAM USERNAME
+# INSTAGRAM INPUT
 # ============================================================
 
 async def handle_instagram(
@@ -743,13 +712,7 @@ async def handle_instagram(
     if user.id not in waiting_for_instagram:
         return
 
-    instagram = (
-        update.message.text.strip()
-    )
-
-    # --------------------------------------------------------
-    # Clean Instagram URL
-    # --------------------------------------------------------
+    instagram = update.message.text.strip()
 
     instagram = instagram.replace(
         "https://instagram.com/",
@@ -796,39 +759,37 @@ async def handle_instagram(
 
         "📱 <b>Do you want to add your "
         "WhatsApp number?</b>\n\n"
-        "It will be shown only in the "
-        "Premium channel.",
+        "It will be shown only in the Premium channel.",
 
         parse_mode="HTML",
 
         reply_markup=InlineKeyboardMarkup(
+
             [
 
                 [
 
                     InlineKeyboardButton(
                         "✅ Yes",
-                        callback_data=(
-                            "whatsapp_yes"
-                        ),
+                        callback_data="whatsapp_yes",
                     ),
 
                     InlineKeyboardButton(
                         "❌ No",
-                        callback_data=(
-                            "whatsapp_no"
-                        ),
+                        callback_data="whatsapp_no",
                     ),
 
                 ]
 
             ]
+
         ),
+
     )
 
 
 # ============================================================
-# WHATSAPP YES / NO
+# WHATSAPP CHOICE
 # ============================================================
 
 async def whatsapp_choice(
@@ -851,10 +812,6 @@ async def whatsapp_choice(
         user.id
     )
 
-    # --------------------------------------------------------
-    # YES
-    # --------------------------------------------------------
-
     if query.data == "whatsapp_yes":
 
         waiting_for_whatsapp.add(
@@ -862,16 +819,14 @@ async def whatsapp_choice(
         )
 
         await query.edit_message_text(
+
             "📱 Send your WhatsApp number.\n\n"
             "Example:\n"
             "+919876543210"
+
         )
 
         return
-
-    # --------------------------------------------------------
-    # NO
-    # --------------------------------------------------------
 
     await query.edit_message_text(
         "✅ Contact setup complete.\n\n"
@@ -886,7 +841,7 @@ async def whatsapp_choice(
 
 
 # ============================================================
-# WHATSAPP NUMBER
+# WHATSAPP INPUT
 # ============================================================
 
 async def handle_whatsapp(
@@ -902,9 +857,7 @@ async def handle_whatsapp(
     if user.id not in waiting_for_whatsapp:
         return
 
-    whatsapp = (
-        update.message.text.strip()
-    )
+    whatsapp = update.message.text.strip()
 
     if not whatsapp:
 
@@ -956,13 +909,9 @@ async def create_submission(
 
     user = update.effective_user
 
-    file_id = data[
-        "file_id"
-    ]
+    file_id = data["file_id"]
 
-    caption = data[
-        "caption"
-    ]
+    caption = data["caption"]
 
     instagram_id = data.get(
         "instagram_id"
@@ -981,7 +930,7 @@ async def create_submission(
     )
 
     # ========================================================
-    # SAVE SUBMISSION
+    # DATABASE DOCUMENT
     # ========================================================
 
     submission = {
@@ -1078,8 +1027,7 @@ async def create_submission(
     # ========================================================
     # PREMIUM CHANNEL
     #
-    # IMPORTANT:
-    # NO BUTTONS HERE.
+    # NO BUTTONS
     # ========================================================
 
     if share_instagram or share_whatsapp:
@@ -1096,10 +1044,6 @@ async def create_submission(
 
         ]
 
-        # ----------------------------------------------------
-        # Instagram
-        # ----------------------------------------------------
-
         if share_instagram:
 
             premium_lines.extend(
@@ -1114,10 +1058,6 @@ async def create_submission(
                 ]
 
             )
-
-        # ----------------------------------------------------
-        # WhatsApp
-        # ----------------------------------------------------
 
         if share_whatsapp:
 
@@ -1151,7 +1091,6 @@ async def create_submission(
 
                     parse_mode="HTML",
 
-                    # NO reply_markup
                 )
             )
 
@@ -1175,12 +1114,12 @@ async def create_submission(
         except Exception as e:
 
             logger.exception(
-                "Failed to post Premium submission: %s",
+                "Premium channel post failed: %s",
                 e,
             )
 
     # ========================================================
-    # USER CONFIRMATION
+    # CONFIRMATION
     # ========================================================
 
     confirmation = (
@@ -1216,16 +1155,11 @@ async def create_submission(
 # PREMIUM CONTACT BUTTON
 # ============================================================
 #
-# IMPORTANT:
+# NO MEMBERSHIP CHECK.
 #
-# There is NO membership check.
+# NO CONTACT EXPOSURE.
 #
-# The bot NEVER exposes Instagram/WhatsApp from this button.
-#
-# It simply directs the user to the paid Telegram Premium
-# invite link.
-#
-# Telegram itself manages payment/subscription.
+# BIG TELEGRAM POPUP.
 # ============================================================
 
 async def premium_contact(
@@ -1235,120 +1169,34 @@ async def premium_contact(
 
     query = update.callback_query
 
+    logger.info(
+        "Premium button clicked: %s",
+        query.data,
+    )
+
     await safe_answer(
+
         query,
-        "🔒 Premium content",
-        show_alert=False,
-    )
 
-    keyboard = InlineKeyboardMarkup(
+        (
+            "🔒 PREMIUM CONTENT\n\n"
 
-        [
+            "📷 Instagram / 📱 WhatsApp details "
+            "are available in our Premium Channel.\n\n"
 
-            [
+            "💎 Premium Access: "
+            f"{PREMIUM_PRICE_TEXT}\n\n"
 
-                InlineKeyboardButton(
+            "📌 Check the PINNED MESSAGE in this "
+            "channel for the Premium channel link.\n\n"
 
-                    "💎 Join Premium — 100 ⭐",
+            "Join Premium to view the full "
+            "contact details."
+        ),
 
-                    url=PREMIUM_CHANNEL_LINK,
-
-                )
-
-            ]
-
-        ]
+        show_alert=True,
 
     )
-
-    premium_text = (
-
-        "🔒 <b>PREMIUM CONTENT</b>\n\n"
-
-        "This creator's contact information "
-        "is available in the Premium channel.\n\n"
-
-        "💎 <b>Premium Access</b>\n"
-        "100 ⭐ / 30 days\n\n"
-
-        "Join Premium to view the creator's "
-        "full contact details."
-
-    )
-
-    # --------------------------------------------------------
-    # Prevent duplicate Premium messages during this session
-    # --------------------------------------------------------
-
-    existing_message_id = context.user_data.get(
-        "premium_prompt_message_id"
-    )
-
-    if existing_message_id:
-
-        try:
-
-            await context.bot.edit_message_text(
-
-                chat_id=query.from_user.id,
-
-                message_id=existing_message_id,
-
-                text=premium_text,
-
-                parse_mode="HTML",
-
-                reply_markup=keyboard,
-
-            )
-
-            return
-
-        except Exception:
-
-            context.user_data.pop(
-                "premium_prompt_message_id",
-                None,
-            )
-
-    # --------------------------------------------------------
-    # Send Premium purchase message
-    # --------------------------------------------------------
-
-    try:
-
-        message = await context.bot.send_message(
-
-            chat_id=query.from_user.id,
-
-            text=premium_text,
-
-            parse_mode="HTML",
-
-            reply_markup=keyboard,
-
-        )
-
-        context.user_data[
-            "premium_prompt_message_id"
-        ] = message.message_id
-
-    except Exception as e:
-
-        logger.exception(
-            "Could not send Premium purchase message: %s",
-            e,
-        )
-
-        await safe_answer(
-
-            query,
-
-            "Open @mytxtgenbot and press /start first.",
-
-            show_alert=True,
-
-        )
 
 
 # ============================================================
@@ -1364,79 +1212,150 @@ async def handle_vote(
 
     data = query.data
 
-    # --------------------------------------------------------
-    # Parse callback
-    # --------------------------------------------------------
+    logger.info(
+        "Received callback: %s",
+        data,
+    )
+
+    # ========================================================
+    # CALLBACK FORMAT
+    # ========================================================
+
+    if not data:
+
+        await safe_answer(
+            query,
+            "❌ Invalid vote.",
+            show_alert=True,
+        )
+
+        return
+
+    if not data.startswith(
+        "rate:"
+    ):
+
+        await safe_answer(
+            query,
+            "❌ Invalid vote.",
+            show_alert=True,
+        )
+
+        return
+
+    parts = data.split(":")
+
+    if len(parts) != 3:
+
+        logger.error(
+            "Invalid vote callback: %s",
+            data,
+        )
+
+        await safe_answer(
+            query,
+            "❌ Invalid vote.",
+            show_alert=True,
+        )
+
+        return
+
+    submission_id = parts[1]
+
+    rating_str = parts[2]
+
+    # ========================================================
+    # RATING
+    # ========================================================
 
     try:
-
-        _,
-        submission_id,
-        rating_str = data.split(":")
 
         rating = int(
             rating_str
         )
 
-    except Exception:
+    except ValueError:
 
         await safe_answer(
-
             query,
-
-            "❌ Invalid vote.",
-
+            "❌ Invalid rating.",
             show_alert=True,
+        )
 
+        return
+
+    if rating not in (
+        1,
+        2,
+        3,
+        4,
+        5,
+    ):
+
+        await safe_answer(
+            query,
+            "❌ Rating must be 1–5.",
+            show_alert=True,
+        )
+
+        return
+
+    # ========================================================
+    # OBJECT ID
+    # ========================================================
+
+    try:
+
+        object_id = ObjectId(
+            submission_id
+        )
+
+    except Exception:
+
+        logger.error(
+            "Invalid ObjectId: %s",
+            submission_id,
+        )
+
+        await safe_answer(
+            query,
+            "❌ Submission not found.",
+            show_alert=True,
+        )
+
+        return
+
+    # ========================================================
+    # GET SUBMISSION
+    # ========================================================
+
+    submission = submissions_collection.find_one(
+
+        {
+            "_id": object_id
+        }
+
+    )
+
+    if not submission:
+
+        await safe_answer(
+            query,
+            "❌ Submission not found.",
+            show_alert=True,
         )
 
         return
 
     user = query.from_user
 
-    # --------------------------------------------------------
-    # Get submission
-    # --------------------------------------------------------
+    # ========================================================
+    # SELF VOTE
+    # ========================================================
 
-    try:
-
-        submission = (
-            submissions_collection.find_one(
-
-                {
-                    "_id": ObjectId(
-                        submission_id
-                    )
-                }
-
-            )
-        )
-
-    except Exception:
-
-        submission = None
-
-    if not submission:
-
-        await safe_answer(
-
-            query,
-
-            "❌ Submission not found.",
-
-            show_alert=True,
-
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Self vote
-    # --------------------------------------------------------
-
-    if submission[
+    if submission.get(
         "user_id"
-    ] == user.id:
+    ) == user.id:
 
         await safe_answer(
 
@@ -1450,23 +1369,21 @@ async def handle_vote(
 
         return
 
-    # --------------------------------------------------------
-    # Existing vote
-    # --------------------------------------------------------
+    # ========================================================
+    # DUPLICATE CHECK
+    # ========================================================
 
-    existing_vote = (
-        votes_collection.find_one(
+    existing_vote = votes_collection.find_one(
 
-            {
-                "submission_id":
-                    submission_id,
+        {
+            "submission_id":
+                submission_id,
 
-                "user_id":
-                    user.id,
+            "user_id":
+                user.id,
 
-            }
+        }
 
-        )
     )
 
     if existing_vote:
@@ -1483,9 +1400,9 @@ async def handle_vote(
 
         return
 
-    # --------------------------------------------------------
-    # Save vote
-    # --------------------------------------------------------
+    # ========================================================
+    # INSERT VOTE
+    # ========================================================
 
     try:
 
@@ -1509,7 +1426,7 @@ async def handle_vote(
 
         )
 
-    except Exception:
+    except DuplicateKeyError:
 
         await safe_answer(
 
@@ -1523,9 +1440,28 @@ async def handle_vote(
 
         return
 
-    # --------------------------------------------------------
-    # Calculate stats
-    # --------------------------------------------------------
+    except Exception as e:
+
+        logger.exception(
+            "Vote insert failed: %s",
+            e,
+        )
+
+        await safe_answer(
+
+            query,
+
+            "❌ Could not save your vote. Please try again.",
+
+            show_alert=True,
+
+        )
+
+        return
+
+    # ========================================================
+    # CALCULATE RATING
+    # ========================================================
 
     votes = list(
 
@@ -1547,26 +1483,26 @@ async def handle_vote(
     average_rating = (
 
         sum(
-            v["rating"]
-            for v in votes
+            vote["rating"]
+            for vote in votes
         )
         / vote_count
 
-        if vote_count
+        if vote_count > 0
 
         else 0
 
     )
 
-    # --------------------------------------------------------
-    # Update public channel
-    # --------------------------------------------------------
+    # ========================================================
+    # UPDATE PUBLIC POST
+    # ========================================================
 
     public_caption = (
 
         "📸 <b>New Submission</b>\n\n"
 
-        f"{escape(submission['caption'])}\n\n"
+        f"{escape(submission.get('caption', ''))}\n\n"
 
         f"⭐ <b>Average:</b> "
         f"{average_rating:.2f}/5\n"
@@ -1615,15 +1551,15 @@ async def handle_vote(
 
         logger.exception(
 
-            "Could not update voting message: %s",
+            "Could not update voting post: %s",
 
             e,
 
         )
 
-    # --------------------------------------------------------
-    # Vote confirmation
-    # --------------------------------------------------------
+    # ========================================================
+    # SUCCESS
+    # ========================================================
 
     await safe_answer(
 
@@ -1647,6 +1583,11 @@ async def leaderboard_popup(
 
     query = update.callback_query
 
+    logger.info(
+        "Leaderboard clicked by %s",
+        query.from_user.id,
+    )
+
     leaderboard = get_leaderboard()
 
     if not leaderboard:
@@ -1655,7 +1596,12 @@ async def leaderboard_popup(
 
             query,
 
-            "🏆 No members have reached 10 votes yet.",
+            (
+                "🏆 LEADERBOARD\n\n"
+
+                "No members have reached "
+                "the minimum of 10 votes yet."
+            ),
 
             show_alert=True,
 
@@ -1676,8 +1622,7 @@ async def leaderboard_popup(
     lines = [
 
         "🏆 LEADERBOARD",
-        "",
-        "Minimum: 10 total votes",
+
         "",
 
     ]
@@ -1703,14 +1648,22 @@ async def leaderboard_popup(
                 "User",
             )
 
-        average = member.get(
-            "average_rating",
-            0,
+        average = float(
+
+            member.get(
+                "average_rating",
+                0,
+            )
+
         )
 
-        vote_count = member.get(
-            "vote_count",
-            0,
+        vote_count = int(
+
+            member.get(
+                "vote_count",
+                0,
+            )
+
         )
 
         lines.append(
@@ -1726,7 +1679,6 @@ async def leaderboard_popup(
         lines
     )
 
-    # Telegram callback alert size safety
     if len(text) > 1900:
 
         text = text[:1900]
@@ -1757,8 +1709,12 @@ async def leaderboard_command(
 
         await update.message.reply_text(
 
-            "🏆 No members have reached "
-            "10 total votes yet."
+            "🏆 <b>LEADERBOARD</b>\n\n"
+
+            "No members have reached "
+            "the minimum of 10 votes yet.",
+
+            parse_mode="HTML",
 
         )
 
@@ -1777,8 +1733,7 @@ async def leaderboard_command(
     lines = [
 
         "🏆 <b>LEADERBOARD</b>",
-        "",
-        "Minimum: 10 total votes",
+
         "",
 
     ]
@@ -1804,14 +1759,22 @@ async def leaderboard_command(
                 "User",
             )
 
-        average = member.get(
-            "average_rating",
-            0,
+        average = float(
+
+            member.get(
+                "average_rating",
+                0,
+            )
+
         )
 
-        vote_count = member.get(
-            "vote_count",
-            0,
+        vote_count = int(
+
+            member.get(
+                "vote_count",
+                0,
+            )
+
         )
 
         lines.append(
@@ -1898,8 +1861,8 @@ async def mystats(
     average = (
 
         sum(
-            v["rating"]
-            for v in votes
+            vote["rating"]
+            for vote in votes
         )
         / total_votes
 
@@ -1940,7 +1903,6 @@ async def handle_text_router(
         update.effective_user.id
     )
 
-    # Instagram input
     if user_id in waiting_for_instagram:
 
         await handle_instagram(
@@ -1950,7 +1912,6 @@ async def handle_text_router(
 
         return
 
-    # WhatsApp input
     if user_id in waiting_for_whatsapp:
 
         await handle_whatsapp(
@@ -1960,7 +1921,6 @@ async def handle_text_router(
 
         return
 
-    # Caption input
     if user_id in waiting_for_caption:
 
         await handle_caption(
@@ -1992,9 +1952,9 @@ async def error_handler(
 
 def main():
 
-    # --------------------------------------------------------
-    # Required environment checks
-    # --------------------------------------------------------
+    # ========================================================
+    # ENVIRONMENT VALIDATION
+    # ========================================================
 
     if not BOT_TOKEN:
 
@@ -2008,15 +1968,9 @@ def main():
             "MONGODB_URI is missing."
         )
 
-    if not WEBHOOK_SECRET:
-
-        logger.warning(
-            "WEBHOOK_SECRET is not set."
-        )
-
-    # --------------------------------------------------------
-    # Build application
-    # --------------------------------------------------------
+    # ========================================================
+    # BUILD APPLICATION
+    # ========================================================
 
     application = (
         Application.builder()
@@ -2068,92 +2022,104 @@ def main():
     # CALLBACKS
     # ========================================================
 
-    # Voting
-    application.add_handler(
+    # --------------------------------------------------------
+    # LEADERBOARD
+    # --------------------------------------------------------
 
-        CallbackQueryHandler(
-
-            handle_vote,
-
-            pattern=r"^rate:"
-
-        )
-
-    )
-
-    # Leaderboard
     application.add_handler(
 
         CallbackQueryHandler(
 
             leaderboard_popup,
 
-            pattern=(
-                r"^leaderboard_popup$"
-            ),
+            pattern=r"^leaderboard_popup$",
 
         )
 
     )
 
-    # Instagram contact
+    # --------------------------------------------------------
+    # VOTING
+    # --------------------------------------------------------
+
+    application.add_handler(
+
+        CallbackQueryHandler(
+
+            handle_vote,
+
+            pattern=r"^rate:",
+
+        )
+
+    )
+
+    # --------------------------------------------------------
+    # INSTAGRAM PREMIUM
+    # --------------------------------------------------------
+
     application.add_handler(
 
         CallbackQueryHandler(
 
             premium_contact,
 
-            pattern=r"^instagram:"
+            pattern=r"^instagram:",
 
         )
 
     )
 
-    # WhatsApp contact
+    # --------------------------------------------------------
+    # WHATSAPP PREMIUM
+    # --------------------------------------------------------
+
     application.add_handler(
 
         CallbackQueryHandler(
 
             premium_contact,
 
-            pattern=r"^whatsapp:"
+            pattern=r"^whatsapp:",
 
         )
 
     )
 
-    # Instagram yes/no
+    # --------------------------------------------------------
+    # INSTAGRAM SETUP
+    # --------------------------------------------------------
+
     application.add_handler(
 
         CallbackQueryHandler(
 
             instagram_choice,
 
-            pattern=(
-                r"^instagram_(yes|no)$"
-            ),
+            pattern=r"^instagram_(yes|no)$",
 
         )
 
     )
 
-    # WhatsApp yes/no
+    # --------------------------------------------------------
+    # WHATSAPP SETUP
+    # --------------------------------------------------------
+
     application.add_handler(
 
         CallbackQueryHandler(
 
             whatsapp_choice,
 
-            pattern=(
-                r"^whatsapp_(yes|no)$"
-            ),
+            pattern=r"^whatsapp_(yes|no)$",
 
         )
 
     )
 
     # ========================================================
-    # PHOTO HANDLER
+    # PHOTO
     # ========================================================
 
     application.add_handler(
@@ -2170,7 +2136,7 @@ def main():
     )
 
     # ========================================================
-    # TEXT HANDLER
+    # TEXT
     # ========================================================
 
     application.add_handler(
@@ -2257,7 +2223,7 @@ def main():
 
 
 # ============================================================
-# START BOT
+# START
 # ============================================================
 
 if __name__ == "__main__":
