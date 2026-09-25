@@ -1,4 +1,0 @@
-python-telegram-bot[webhooks]==22.5
-pymongo==4.15.0
-python-dotenv==1.1.1
-dnspython==2.7.0
